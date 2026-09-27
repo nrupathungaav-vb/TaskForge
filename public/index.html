@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TaskForge Dashboard</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --border: #e3e2dd;
+    --waiting: #2f6fdf; --delayed: #8a6bd1; --active: #d98b0b; --completed: #2e9e5b; --dead: #d6453d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141413; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a93; --border: #33332f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+  h1 { font-size: 18px; margin: 0; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  .live { color: var(--muted); font-size: 12px; }
+  .live::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--completed); margin-right: 6px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab { border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 6px 14px; border-radius: 999px; cursor: pointer; font: inherit; }
+  .tab.on { border-color: var(--text); font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+  .stat.on { outline: 2px solid var(--text); }
+  .stat .n { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat .l { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: 0; }
+  td.err { max-width: 320px; overflow: hidden; text-overflow: ellipsis; color: var(--dead); font-family: ui-monospace, monospace; font-size: 12px; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; color: #fff; }
+  button.retry { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>TaskForge <span>queue dashboard</span></h1>
+  <div class="live" id="live">live</div>
+</header>
+<main>
+  <div class="tabs" id="tabs"></div>
+  <div class="stats" id="stats"></div>
+  <div class="panel" id="jobs"></div>
+</main>
+<script>
+const STATES = ['waiting', 'delayed', 'active', 'completed', 'dead'];
+let queue = null, filter = null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`; };
+const color = (s) => `var(--${s})`;
+
+async function refresh() {
+  try {
+    const queues = await (await fetch('/api/queues')).json();
+    if (!queue && queues.length) queue = queues[0].name;
+    $('tabs').innerHTML = queues.map((q) => `<button class="tab ${q.name === queue ? 'on' : ''}" data-q="${esc(q.name)}">${esc(q.name)}</button>`).join('');
+    const cur = queues.find((q) => q.name === queue);
+    if (!cur) { $('stats').innerHTML = ''; $('jobs').innerHTML = '<div class="empty">No jobs yet. POST to /api/queues/:queue/jobs to add one.</div>'; return; }
+    $('stats').innerHTML = STATES.map((s) => `
+      <button class="stat ${filter === s ? 'on' : ''}" data-s="${s}">
+        <div class="l"><span class="dot" style="background:${color(s)}"></span>${s}</div>
+        <div class="n">${cur[s]}</div>
+      </button>`).join('');
+    const status = filter === 'delayed' ? 'waiting' : filter;
+    let jobs = await (await fetch(`/api/queues/${encodeURIComponent(queue)}/jobs?limit=100${status ? `&status=${status}` : ''}`)).json();
+    if (filter === 'delayed') jobs = jobs.filter((j) => j.runAt > Date.now());
+    if (filter === 'waiting') jobs = jobs.filter((j) => j.runAt <= Date.now());
+    $('jobs').innerHTML = jobs.length ? `
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Priority</th><th>Attempts</th><th>Updated</th><th>Last error</th><th></th></tr></thead>
+        <tbody>${jobs.map((j) => {
+          const st = j.status === 'waiting' && j.runAt > Date.now() ? 'delayed' : j.status;
+          return `<tr>
+            <td>#${j.id}</td><td>${esc(j.name)}</td>
+            <td><span class="badge" style="background:${color(st)}">${st}</span></td>
+            <td>${j.priority}</td><td>${j.attempts}/${j.maxAttempts}</td><td>${ago(j.updatedAt)}</td>
+            <td class="err" title="${esc(j.lastError)}">${esc(j.lastError?.split('\n')[0])}</td>
+            <td>${j.status === 'dead' ? `<button class="retry" data-id="${j.id}">Retry</button>` : ''}</td>
+          </tr>`; }).join('')}</tbody>
+      </table>` : '<div class="empty">No jobs in this state.</div>';
+    $('live').textContent = 'live';
+  } catch {
+    $('live').textContent = 'disconnected';
+  }
+}
+
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-q],[data-s],[data-id]');
+  if (!t) return;
+  if (t.dataset.q) { queue = t.dataset.q; filter = null; }
+  else if (t.dataset.s) filter = filter === t.dataset.s ? null : t.dataset.s;
+  else if (t.dataset.id) await fetch(`/api/jobs/${t.dataset.id}/retry`, { method: 'POST' });
+  refresh();
+});
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

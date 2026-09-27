@@ -1,0 +1,37 @@
+{
+  "name": "taskforge",
+  "version": "1.0.0",
+  "description": "A durable, SQLite-backed background job queue for Node.js with retries, backoff, priorities, delayed jobs, crash recovery, and a live dashboard.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "demo": "tsx --disable-warning=ExperimentalWarning examples/demo.ts",
+    "bench": "tsx --disable-warning=ExperimentalWarning examples/bench.ts"
+  },
+  "keywords": [
+    "job-queue",
+    "background-jobs",
+    "sqlite",
+    "worker",
+    "retry",
+    "typescript"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}
