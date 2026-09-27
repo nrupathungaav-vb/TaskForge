@@ -1,6 +1,6 @@
 # TaskForge
 
-[![CI](https://github.com/OWNER/taskforge/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/taskforge/actions/workflows/ci.yml)
+[![CI](https://github.com/nrupathungaav-vb/taskforge/actions/workflows/ci.yml/badge.svg)](https://github.com/nrupathungaav-vb/taskforge/actions/workflows/ci.yml)
 
 A durable background job queue for Node.js, written in TypeScript and backed by SQLite. It has **no external services and no native dependencies**. It uses Node's built-in `node:sqlite`.
 
